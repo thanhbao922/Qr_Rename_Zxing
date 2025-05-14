@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>QR Rename Tool</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script type="module">
+    import { BrowserQRCodeReader } from 'https://cdn.jsdelivr.net/npm/@zxing/browser@latest/+esm';
+    window.ZXingReader = BrowserQRCodeReader;
+  </script>
+  <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      padding: 20px;
+    }
+    #customFileUpload {
+      margin-bottom: 10px;
+      padding: 15px 15px 15px 13px;
+      border: 2px dashed #90caf9;
+      border-radius: 10px;
+      display: inline-block;
+      cursor: pointer;
+      background: #e3f2fd;
+      font-size: 16px;
+      font-weight: 500;
+      color: #1976d2;
+      transition: all 0.3s ease;
+    }
+    #customFileUpload:hover {
+      background: #bbdefb;
+      border-color: #64b5f6;
+      transform: scale(1.02);
+    }
+    input[type="file"] {
+      display: none;
+    }
+    #fileCount {
+      margin-top: 10px;
+      font-weight: bold;
+      color: #1976d2;
+    }
+    #progressBar {
+      width: 100%;
+      height: 20px;
+      margin-top: 20px;
+      display: none;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #eee;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.2);
+    }
+    #progressBar::-webkit-progress-bar {
+      background-color: #eee;
+      border-radius: 10px;
+    }
+    #progressBar::-webkit-progress-value {
+      background-image: linear-gradient(to right, #4CAF50, #81C784);
+      border-radius: 10px;
+      transition: width 0.4s ease;
+    }
+    #progressBar::-moz-progress-bar {
+      background-image: linear-gradient(to right, #4CAF50, #81C784);
+      border-radius: 10px;
+      transition: width 0.4s ease;
+    }
+    #log {
+      white-space: pre-wrap;
+      background: #f0f0f0;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+      border: 1px solid #ddd;
+      font-size: 14px;
+      line-height: 2;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+    }
+    button:hover {
+      background-color: #45a049;
+      transform: scale(1.03);
+    }
+  </style>
+</head>
+<body>
+  <h1>
+    <img src="logo.jpg" alt="Logo" style="width: 40px; vertical-align: middle; margin-right: 10px;">
+    File Renamer
+  </h1>
+  <p><em>Tải lên tệp PDF hoặc hình ảnh chứa mã QR. Ứng dụng sẽ trích xuất mã QR, đổi tên tệp và nén chúng vào một tệp ZIP để tải xuống.</em></p>
+  <label for="fileInput" id="customFileUpload">📂 Chọn tệp</label>
+  <input type="file" id="fileInput" multiple accept=".pdf,.png,.jpg,.jpeg" />
+  <div id="fileCount"></div>
+  <progress id="progressBar" value="0" max="100"></progress>
+  <h2 style="margin-top: 20px; font-size: 20px; color: #333;">📋 Chi tiết</h2>
+  <div id="log"></div>
+  <button id="downloadBtn" style="display:none;">📦 Tải xuống ZIP</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js"></script>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const log = document.getElementById('log');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const progressBar = document.getElementById('progressBar');
+    const zip = new JSZip();
+    const renamedFiles = [];
+
+    fileInput.addEventListener('change', async (event) => {
+      log.textContent = '';
+      const files = event.target.files;
+      document.getElementById('fileCount').textContent = `Đã chọn ${files.length} file(s)`;
+      renamedFiles.length = 0;
+      zip.files = {};
+
+      let successCount = 0;
+      let failCount = 0;
+      progressBar.style.display = 'block';
+      progressBar.value = 0;
+      let processedCount = 0;
+
+      for (const file of files) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        let imageData;
+
+        if (ext === 'pdf') {
+          imageData = await renderPDFToImage(file);
+        } else if (['png', 'jpg', 'jpeg'].includes(ext)) {
+          imageData = await fileToImage(file);
+        } else {
+          log.textContent += `❌ Định dạng không hỗ trợ: ${file.name}\n`;
+          continue;
+        }
+
+        if (imageData) {
+          try {
+            const reader = new ZXingReader();
+            const result = await reader.decodeFromImageElement(imageData);
+            const newName = `${result.text}.${ext}`;
+            zip.file(newName, file);
+            renamedFiles.push(newName);
+            successCount++;
+            log.textContent += `✅ Đã đổi tên: ${file.name} → ${newName}\n`;
+          } catch (err) {
+            failCount++;
+            log.textContent += `⚠️ Không tìm thấy mã QR trong: ${file.name}\n`;
+          }
+        } else {
+          failCount++;
+          log.textContent += `❌ Lỗi khi xử lý: ${file.name}\n`;
+        }
+
+        processedCount++;
+        progressBar.value = (processedCount / files.length) * 100;
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: '📦 Tổng kết',
+        html: `${successCount} file(s) thành công<br>${failCount} file(s) lỗi.`,
+        confirmButtonText: 'OK - Tải file ZIP xuống'
+      });
+
+      if (renamedFiles.length > 0) {
+        downloadBtn.style.display = 'inline-block';
+      } else {
+        downloadBtn.style.display = 'none';
+      }
+
+      progressBar.value = 100;
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      zip.generateAsync({ type: 'blob' }).then((content) => {
+        saveAs(content, 'renamed_files.zip');
+      });
+    });
+
+    async function renderPDFToImage(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 3 });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: context, viewport: viewport }).promise;
+      const img = new Image();
+      img.src = canvas.toDataURL();
+      return new Promise((resolve) => {
+        img.onload = () => resolve(img);
+      });
+    }
+
+    async function fileToImage(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  </script>
+</body>
+</html>
