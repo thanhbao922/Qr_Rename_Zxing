@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <title>QR Rename Tool (test)</title>
+  <title>QR Rename Tool</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" href="favicon.png">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -95,7 +95,7 @@
 <body>
   <h1>
     <img src="logo.jpg" alt="Logo" style="width: 40px; vertical-align: middle; margin-right: 10px;">
-    File Renamer (test)
+    File Renamer
   </h1>
   <p><em>Tải lên tệp PDF hoặc hình ảnh chứa mã QR. Ứng dụng sẽ trích xuất mã QR, đổi tên tệp và nén chúng vào một tệp ZIP để tải xuống.</em></p>
   <label for="fileInput" id="customFileUpload">📂 Chọn tệp</label>
@@ -146,8 +146,9 @@
 
         if (imageData) {
           try {
+            const paddedImg = await addPaddingToImage(imageData, 20);
             const reader = new ZXingReader();
-            const result = await reader.decodeFromImageElement(imageData);
+            const result = await reader.decodeFromImageElement(paddedImg);
             const newName = `${result.text}.${ext}`;
             zip.file(newName, file);
             renamedFiles.push(newName);
@@ -192,7 +193,7 @@
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const page = await pdf.getPage(1);
-      const viewport = page.getViewport({ scale: 3 });
+      const viewport = page.getViewport({ scale: 4 });
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
       canvas.width = viewport.width;
@@ -214,6 +215,21 @@
           img.src = reader.result;
         };
         reader.readAsDataURL(file);
+      });
+    }
+
+    async function addPaddingToImage(img, padding = 20) {
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width + padding * 2;
+        canvas.height = img.height + padding * 2;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, padding, padding);
+        const paddedImg = new Image();
+        paddedImg.src = canvas.toDataURL();
+        paddedImg.onload = () => resolve(paddedImg);
       });
     }
   </script>
